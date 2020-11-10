@@ -1,0 +1,131 @@
+import ListItemText from '@material-ui/core/ListItemText/ListItemText';
+import Paper from '@material-ui/core/Paper/Paper';
+import Tooltip from '@material-ui/core/Tooltip/Tooltip';
+import { withStyles } from '@material-ui/core';
+
+import { ELEVATION, TRANSITION_TOOLTIP } from '../../constants/attribute.constants';
+
+import commonStyles from '../../styling/shared-styles/common.styles';
+
+const styles = (theme) => ({
+  ...commonStyles(theme),
+  container: {
+    height: 'auto',
+    minHeight: 300,
+  },
+  filterOn: {
+    height: 22,
+    width: 22,
+    padding: '6px 4px 6px 6px',
+    color: 'green',
+    '&:hover': {
+      color: theme.palette.primary.main,
+    },
+  },
+});
+
+const TOOLTIP_FILTER_TEXT = 'filter';
+const TOOLTIP_SHOWALL_TEXT = 'show all';
+
+// Displays a formatted list with title and icon to add a new entity
+// If configured so with 'doesFilter', will also show filter icon
+// and in that case, dataList should be filtered
+const EntityList = (props) => {
+  const {
+    classes,
+    entityType,
+    selectedEntityName,
+    dataList,
+    handleSelected,
+    handleAdd,
+    doesFilter,
+    filtering,
+    handleToggleFilter,
+    title,
+  } = props;
+
+  return (
+    <Paper elevation={ELEVATION} className={classNames(classes.list, classes.container)}>
+      <List dense>
+        <ListItem>
+          <ListItemText className={classes.listTitle}>{title || `${entityType}s`}</ListItemText>
+
+          {doesFilter && (
+            <Tooltip
+              title={filtering ? TOOLTIP_SHOWALL_TEXT : TOOLTIP_FILTER_TEXT}
+              enterDelay={TRANSITION_TOOLTIP}
+              interactive
+              classes={{ tooltip: classes.tooltip }}
+            >
+              <FilterIcon
+                id="filterIcon"
+                className={filtering ? classes.filterOn : classes.clickableIcon}
+                aria-label="FilterList"
+                onClick={handleToggleFilter}
+              />
+            </Tooltip>
+          )}
+
+          <Tooltip
+            title={`add new ${entityType}`}
+            enterDelay={TRANSITION_TOOLTIP}
+            interactive
+            classes={{ tooltip: classes.tooltip }}
+          >
+            <AddIcon aria-label="Add" className={classes.clickableIcon} onClick={handleAdd} />
+          </Tooltip>
+        </ListItem>
+
+        {dataList.map((element) => {
+          const isSelected = element.name === selectedEntityName;
+          return (
+            <div key={element.id}>
+              <ListItem button selected={isSelected} onClick={() => handleSelected(element)}>
+                <ListItemText
+                  classes={{ primary: classes.listItemText, root: classes.listItemText }}
+                >
+                  {element.name}
+                </ListItemText>
+              </ListItem>
+              <div className={classes.listDiv} />
+            </div>
+          );
+        })}
+      </List>
+    </Paper>
+  );
+};
+
+EntityList.propTypes = {
+  classes: PropTypes.object.isRequired,
+  entityType: PropTypes.string.isRequired,
+  selectedEntityName: PropTypes.string.isRequired,
+  dataList: PropTypes.array.isRequired,
+  handleSelected: PropTypes.func.isRequired,
+  handleAdd: PropTypes.func.isRequired,
+  doesFilter: PropTypes.bool,
+  filtering: PropTypes.bool,
+  handleToggleFilter: PropTypes.func,
+  title: PropTypes.string,
+};
+
+EntityList.defaultProps = {
+  doesFilter: false,
+  filtering: false,
+  handleToggleFilter: () => {},
+  title: '',
+};
+
+export default withStyles(styles, { name: 'EntityList' })(EntityList);
+© 2020 GitHub, Inc.
+Terms
+Privacy
+Security
+Status
+Help
+Contact GitHub
+Pricing
+API
+Training
+Blog
+About
