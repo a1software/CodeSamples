@@ -1,0 +1,148 @@
+/* eslint-disable id-length */
+import React from 'react';
+import PropTypes from 'prop-types';
+import { withStyles } from '@material-ui/core/styles';
+
+import AppContext from '../../main/app.context';
+import TextInput from '../shared/text-input.comp';
+import SelectInput from '../shared/select-input.comp';
+import SubmitBtn from '../shared/submit-btn.comp';
+
+import { CREATE_ACTION } from '../../constants/action.constants';
+
+import * as packagesData from '../../data-resources/packages.data';
+
+import detailsStyles from '../../styling/shared-styles/details-panels.styles';
+import commonStyles from '../../styling/shared-styles/common.styles';
+
+const styles = (theme) => ({
+  ...detailsStyles(theme),
+  ...commonStyles(theme),
+});
+
+// Handles editing a package or creating a new package
+class EditPackage extends React.PureComponent {
+  constructor(props) {
+    super(props);
+    this.handleTypeChange = this.handleTypeChange.bind(this);
+    this.handleSubmit = this.handleSubmit.bind(this);
+    const { pkg } = this.props;
+    this.state = { pkg };
+  }
+
+  handlePropertyChange = (fieldName) => (event) => {
+    const { value } = event.target;
+    this.setState((state) => ({ pkg: { ...state.pkg, [fieldName]: value } }));
+  };
+
+  handleTypeChange(event) {
+    const { value } = event.target;
+    const { packageTypes } = this.props;
+    this.setState((state) => ({
+      pkg: { ...state.pkg, typeName: value, type: packageTypes.find((p) => p.name === value).slug },
+    }));
+  }
+
+  handleSubmit() {
+    const { action, doneEditing } = this.props;
+    const { setNotify, accessToken } = this.context;
+    const { pkg } = this.state;
+    const payload = pkg.notes === null ? { ...pkg, notes: ' ' } : pkg;
+
+    if (action === CREATE_ACTION) {
+      payload.name = payload.name ? payload.name.trim() : payload.name;
+      packagesData
+        .postPackage(payload, accessToken)
+        .then((res) => doneEditing({ ...payload, id: res }))
+        .catch((err) => setNotify(err.message));
+    } else {
+      packagesData
+        .putPackage(payload, accessToken)
+        .then(() => doneEditing(pkg))
+        .catch((err) => setNotify(err.message));
+    }
+  }
+
+  render() {
+    const { classes, platforms, packageTypes, action } = this.props;
+    const { pkg } = this.state;
+
+    return (
+      <div className={classes.editPropsContainer}>
+        {/* Name */}
+        <TextInput
+          propertyName="Name"
+          propertyValue={pkg.name}
+          required
+          handleChange={this.handlePropertyChange('name')}
+        />
+
+        {/* Platform */}
+        <div className={classes.property}>
+          Platform
+          <div className={classes.dropdown}>
+            <SelectInput
+              label="Platform"
+              selectedValue={pkg.platform || ''}
+              selectableValues={platforms.map((p) => p.name)}
+              handleSelection={this.handlePropertyChange('platform')}
+              required
+            />
+          </div>
+        </div>
+
+        {/* Package Type */}
+        <div className={classes.property}>
+          Package Type
+          <div className={classes.dropdown}>
+            <SelectInput
+              label="Package Type"
+              selectedValue={pkg.typeName || ''}
+              selectableValues={packageTypes.map((p) => p.name)}
+              handleSelection={this.handleTypeChange}
+              required
+            />
+          </div>
+        </div>
+
+        {/* File Location */}
+        <TextInput
+          propertyName="File Location"
+          propertyValue={pkg.fileLocation}
+          required
+          handleChange={this.handlePropertyChange('fileLocation')}
+        />
+
+        {/* Notes */}
+        <TextInput
+          propertyName="Notes"
+          propertyValue={pkg.notes}
+          handleChange={this.handlePropertyChange('notes')}
+        />
+
+        {/* MD5 */}
+        <TextInput
+          propertyName="MD5"
+          propertyValue={pkg.md5}
+          required
+          handleChange={this.handlePropertyChange('md5')}
+        />
+
+        {/* Submit */}
+        <SubmitBtn action={action} handleSelect={this.handleSubmit} />
+      </div>
+    );
+  }
+}
+
+EditPackage.propTypes = {
+  classes: PropTypes.object.isRequired,
+  packageTypes: PropTypes.array.isRequired,
+  platforms: PropTypes.array.isRequired,
+  action: PropTypes.string.isRequired,
+};
+
+EditPackage.contextType = AppContext;
+
+export default withStyles(styles)(EditPackage);
+export { EditPackage as EditPackageComp };
