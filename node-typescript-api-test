@@ -1,0 +1,156 @@
+import 'jest-extended';
+
+import httpStatusCodes from 'http-status-codes';
+import uuid from 'uuid';
+
+import {createProxyEvent} from '../../lib/test/proxy-event';
+import {handler, getContext} from '../../index';
+import {postOrderCreateSnsMsg} from '../../lib';
+import {Order, OrderLineItem, OrderResult} from '../../data';
+
+jest.mock('../../lib/sns');
+const postOrderSnsMsgMock = postOrderCreateSnsMsg as jest.Mock<any>;
+postOrderSnsMsgMock.mockImplementation(async () => {});
+
+async function readOrder(orderId: string): Promise<Order> {
+  const conn = getContext().db;
+  return conn.one(
+    `SELECT
+      id,
+      billing_profile_id AS "billingProfileId",
+      currency
+    FROM "order"
+    WHERE id=$[orderId]`,
+    {
+      orderId
+    }
+  );
+}
+
+async function readOrderLineItems(orderId: string): Promise<OrderLineItem[]> {
+  const conn = getContext().db;
+  return conn.manyOrNone(
+    `SELECT
+      id,
+      order_id AS "orderId",
+      product_id AS "productId",
+      sku,
+      count,
+      price,
+      agency
+    FROM order_line_item
+    WHERE order_id=$[orderId]`,
+    {
+      orderId
+    }
+  );
+}
+
+describe('POST /order', () => {
+  afterEach(() => async () => {
+    try {
+      await getContext().db.none('TRUNCATE order RESTART IDENTITY CASCADE');
+    } catch (error) {
+      console.error(`Could not truncate database: ${JSON.stringify(error)}`);
+    }
+  });
+
+  test('responds with bad request when no payload is provided', async () => {
+    const result = await handler(createProxyEvent('POST', '/order'));
+    expect(result.statusCode).toBe(httpStatusCodes.BAD_REQUEST);
+  });
+
+  test('responds with bad request when payload is not valid', async () => {
+    const result = await handler(
+      createProxyEvent('POST', '/order', {
+        foo: 'bar'
+      })
+    );
+
+    expect(result.statusCode).toBe(httpStatusCodes.BAD_REQUEST);
+  });
+
+  test('responds with bad request if no line items are provided', async () => {
+    const result = await handler(
+      createProxyEvent('POST', '/order', {
+        billingProfileId: uuid.v4(),
+        currency: 'USD',
+        lineItems: []
+      })
+    );
+
+    expect(result.statusCode).toBe(httpStatusCodes.BAD_REQUEST);
+  });
+
+  test('accepts valid order and writes it to database', async () => {
+    const result = await handler(
+      createProxyEvent('POST', '/order', {
+        billingProfileId: uuid.v4(),
+        currency: 'USD',
+        lineItems: [
+          {
+            productId: uuid.v4(),
+            count: 1,
+            sku: 'some_ticket',
+            price: 200,
+            agency: 'test'
+          }
+        ]
+      })
+    );
+
+    expect(result.statusCode).toBe(httpStatusCodes.CREATED);
+
+    const payload = JSON.parse(result.body) as OrderResult;
+    expect(payload.orderId).toBeString();
+
+    const order = await readOrder(payload.orderId);
+    expect(order).not.toBeNull();
+    expect(order.id).toBeString();
+    expect(order.billingProfileId).toBeString();
+    expect(order.currency).toBeString();
+
+    expect(postOrderCreateSnsMsg).toHaveBeenCalled();
+  });
+
+  test('writes line items to database with correct order id', async () => {
+    const result = await handler(
+      createProxyEvent('POST', '/order', {
+        billingProfileId: uuid.v4(),
+        currency: 'USD',
+        lineItems: [
+          {
+            productId: uuid.v4(),
+            count: 1,
+            sku: 'some_ticket',
+            price: 200,
+            agency: 'test'
+          },
+          {
+            productId: uuid.v4(),
+            count: 2,
+            sku: 'some_other_ticket',
+            price: 500,
+            agency: 'test2'
+          }
+        ]
+      })
+    );
+
+    expect(result.statusCode).toBe(httpStatusCodes.CREATED);
+
+    const payload = JSON.parse(result.body) as OrderResult;
+    expect(payload.orderId).toBeString();
+
+    const lineItems = await readOrderLineItems(payload.orderId);
+    expect(lineItems).toBeArrayOfSize(2);
+    for (const lineItem of lineItems) {
+      expect(lineItem.orderId).toBeString();
+      expect(lineItem.productId).toBeString();
+      expect(lineItem.count).toBePositive();
+      expect(lineItem.sku).toBeString();
+      expect(lineItem.price).toBePositive();
+      expect(lineItem.agency).toBeString();
+    }
+  });
+});
