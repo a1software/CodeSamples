@@ -1,0 +1,66 @@
+import {ServerRoute, Request, ResponseToolkit, ResponseObject} from '@hapi/hapi';
+import Boom from '@hapi/boom';
+import Joi from '@hapi/joi';
+import {CREATED, BAD_REQUEST} from 'http-status-codes';
+
+import constructXGs from '../lib/merchant/construct-x-gs';
+import {ErrorTypes} from '../constants';
+import * as logger from '@xxx/na-lambda-logger';
+import {PromoPayload} from '../models/redeem-payload';
+import {awardTicket} from '../lib/merchant/award-ticket';
+
+async function redeemPromo(
+  request: Request,
+  responseT: ResponseToolkit
+): Promise<ResponseObject | Boom> {
+  const requestPayload = request.payload as PromoPayload;
+
+  const xGsParams = constructXGs(request.headers);
+
+  try {
+    await awardTicket(
+      request.headers['x-gs-scope'],
+      requestPayload.userId,
+      requestPayload.productId,
+      requestPayload.promoCode,
+      xGsParams
+    );
+    return responseT.response(undefined).code(CREATED);
+  } catch (err) {
+    if (err.message && err.message === ErrorTypes.NoPrice) {
+      return responseT.response('Product not available for purchase').code(BAD_REQUEST);
+    } else if (err.message && err.message === ErrorTypes.NoProduct) {
+      return responseT.response('Product not found').code(ErrorTypes.RESOURCE_NOT_FOUND);
+    } else {
+      throw err;
+    }
+  }
+}
+
+const headers = Joi.object({
+  'x-gs-scope': Joi.string()
+    .required()
+    .description('The agency scope')
+}).options({allowUnknown: true});
+
+const route: ServerRoute = {
+  method: 'POST',
+  path: '/redeem/promo-code',
+  options: {
+    auth: false,
+    handler: redeemPromo,
+    description: 'Redeem a promotion',
+    notes: 'Current version supports promotions from the "Validated" platform',
+    tags: ['api'],
+    validate: {
+      headers,
+      payload: {
+        userId: Joi.number().required(),
+        promoCode: Joi.string().required(),
+        productId: Joi.number().required()
+      }
+    }
+  }
+};
+
+export default route;
