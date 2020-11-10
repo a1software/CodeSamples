@@ -1,3 +1,6 @@
+NOTE:  this was a work in progress; not yet cleaned up completely
+
+
 import * as bluebird from 'bluebird';
 import {SQSEvent, SQSRecord} from 'aws-lambda';
 
