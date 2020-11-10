@@ -1,0 +1,65 @@
+import * as bluebird from 'bluebird';
+import {SQSEvent, SQSRecord} from 'aws-lambda';
+
+import {logger} from '@us/na-lambda-logger';
+import {
+  config,
+  waitForConfig,
+  generateTicketImages,
+  getTicketOrderData,
+  RenderContext,
+  TicketOrderData,
+  updateOrderItemState
+} from './lib';
+
+let context: RenderContext;
+
+export async function handler(event: SQSEvent): Promise<void> {
+  logger.info('handling SQS event ', JSON.stringify(event));
+
+  await getContext();
+  await bluebird.Promise.mapSeries(event.Records, handleTicketAnimationRequest);
+}
+
+async function handleTicketAnimationRequest(sqsRecord: SQSRecord): Promise<void> {
+  logger.info(`processing event record ${sqsRecord.body}`);
+
+  let orderData;
+  try {
+    const ticketId = getTicketIdFromSQSRecord(sqsRecord);
+    orderData = await getTicketOrderData(context, ticketId);
+  } catch (error) {
+    logger.error(`Cannot locate matching order/ticket data for request, ${error}`, {sqsRecord});
+    return;
+  }
+
+  try {
+    await generateTicketImages(context, orderData as TicketOrderData);
+    await updateOrderItemState(context, (orderData as TicketOrderData).orderLineItemId, 'complete');
+  } catch (error) {
+    logger.error(`Error processing request, ${error}`, {sqsRecord});
+    await updateOrderItemState(
+      context,
+      (orderData as TicketOrderData).orderLineItemId,
+      'error',
+      'animated images for ticket display failed to generate'
+    );
+  }
+}
+
+export async function getContext(): Promise<RenderContext> {
+  await waitForConfig;
+  if (!context) {
+    context = new RenderContext(config);
+  }
+  return context;
+}
+
+function getTicketIdFromSQSRecord(sqsRecord: SQSRecord): string {
+  try {
+    return JSON.parse(sqsRecord.body).ticket_id;
+  } catch (err) {
+    logger.error(`getTicketIdFromSQSRecord(), ${err}`);
+    throw err;
+  }
+}
