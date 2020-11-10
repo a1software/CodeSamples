@@ -1,0 +1,22 @@
+import React from 'react';
+import Button from '@material-ui/core/Button/Button';
+import { withStyles } from '@material-ui/core';
+
+import { CREATE_ACTION } from '../../constants/action.constants';
+import { CREATE_LABEL, UPDATE_LABEL } from '../../constants/button-label.constants';
+
+import commonStyles from '../../styling/shared-styles/common.styles';
+
+const SubmitBtn = (props) => {
+  const { classes, action, handleSelect } = props;
+
+  return (
+    <div>
+      <Button className={classes.button} onClick={handleSelect}>
+        {action === CREATE_ACTION ? CREATE_LABEL : UPDATE_LABEL}
+      </Button>
+    </div>
+  );
+};
+
+export default withStyles(commonStyles, { name: 'SubmitBtn' })(SubmitBtn);
